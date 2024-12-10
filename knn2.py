@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Thêm middleware CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://animetangobackend.onrender.com"],  # Cho phép tất cả origin
+    allow_origins=["https://animetangobackend.onrender.com"],  # Cho phép origin cụ thể
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -24,29 +24,21 @@ client = MongoClient("mongodb+srv://sangvo22026526:5anG15122003@cluster0.rcd65hj
 db = client["anime_tango2"]
 
 # Tải dữ liệu từ MongoDB
-df_favorites = pd.DataFrame(list(db["UserFavorites"].find()))  # Thay đổi thành UserFavorites
+df_user_rating = pd.DataFrame(list(db["UserRating"].find()))
 df_anime = pd.DataFrame(list(db["Anime"].find()))
 
-user_anime_matrix = pd.DataFrame(
-    [
-        (user["User_id"], anime_id, 1)  # Đánh giá anime = 1 nếu người dùng yêu thích
-        for user in df_favorites.to_dict(orient="records")
-        for anime_id in user["favorites"]
-    ],
-    columns=["User_id", "Anime_id", "Rating"]
-)
+# Xử lý dữ liệu UserRating
+df_user_rating["Rating"] = df_user_rating["Rating"].apply(lambda x: 1 if x >= 7 else (-1 if x <= 6 else 0))
 
-# Pivot bảng để tạo ma trận sparse
-animes_users = user_anime_matrix.pivot(index="User_id", columns="Anime_id", values="Rating").fillna(0)
+# Tạo ma trận animes_users
+animes_users = df_user_rating.pivot(index="User_id", columns="Anime_id", values="Rating").fillna(0)
 mat_anime = csr_matrix(animes_users.values)
 
 print("Danh sách user_id có trong animes_users.index:", animes_users.index.tolist())
 
 # Bước 2: Huấn luyện mô hình KNN để tìm các người dùng tương tự
-model = NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=5)  # Bạn có thể thay đổi số lượng người dùng gần nhất (n_neighbors)
+model = NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=5)
 model.fit(mat_anime)
-
-from bson import ObjectId
 
 def jsonable(data):
     if isinstance(data, list):
@@ -56,6 +48,7 @@ def jsonable(data):
     elif isinstance(data, ObjectId):
         return str(data)
     return data
+
 # API POST để gợi ý anime
 @app.post("/")
 async def recommend(request: Request):
@@ -76,7 +69,7 @@ async def recommend(request: Request):
             similar_user = animes_users.iloc[i]
             # Tìm anime mà người dùng này đã xem nhưng người dùng ban đầu chưa xem
             for anime_id, rating in similar_user.items():
-                if rating > 0 and anime_id not in animes_users.iloc[user_idx][animes_users.columns != anime_id]:
+                if rating == 1 and anime_id not in animes_users.iloc[user_idx][animes_users.columns != anime_id]:
                     recommended_animes.add(anime_id)
 
     # Lấy thông tin anime từ df_anime
@@ -90,5 +83,5 @@ async def recommend(request: Request):
 import uvicorn
 import os
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))  # Render sẽ cung cấp cổng trong biến PORT
+    port = int(os.getenv("PORT", 8000))
     uvicorn.run("knn2:app", host="0.0.0.0", port=port)
