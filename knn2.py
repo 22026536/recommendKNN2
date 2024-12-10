@@ -50,6 +50,8 @@ def jsonable(data):
     return data
 
 # API POST để gợi ý anime
+from collections import Counter
+
 @app.post("/")
 async def recommend(request: Request):
     data = await request.json()
@@ -61,24 +63,35 @@ async def recommend(request: Request):
 
     # Tìm người dùng tương tự
     user_idx = animes_users.index.get_loc(user_id)
-    distances, indices = model.kneighbors(mat_anime[user_idx], n_neighbors=n)
+    distances, indices = model.kneighbors(mat_anime[user_idx], n_neighbors=len(animes_users))
 
-    recommended_animes = set()
+    # Đếm tần suất anime từ người dùng gần nhất
+    anime_counter = Counter()
+
     for i in indices.flatten():
         if i != user_idx:  # Loại bỏ chính người dùng
             similar_user = animes_users.iloc[i]
-            # Tìm anime mà người dùng này đã xem nhưng người dùng ban đầu chưa xem
+            # Đếm các anime mà người dùng này đã đánh giá
             for anime_id, rating in similar_user.items():
-                if rating == 1 and anime_id not in animes_users.iloc[user_idx][animes_users.columns != anime_id]:
-                    recommended_animes.add(anime_id)
+                if rating == 1:  # Chỉ xét các anime có rating >= 7 (hoặc tương đương)
+                    anime_counter[anime_id] += 1
+
+    # Loại bỏ anime mà người dùng hiện tại đã xem
+    user_anime = set(animes_users.iloc[user_idx][animes_users.iloc[user_idx] != 0].index)
+    anime_counter = {anime_id: count for anime_id, count in anime_counter.items() if anime_id not in user_anime}
+
+    # Sắp xếp anime theo tần suất giảm dần
+    sorted_anime = sorted(anime_counter.items(), key=lambda x: x[1], reverse=True)
 
     # Lấy thông tin anime từ df_anime
     recommendations = []
-    for anime_id in recommended_animes:
+    for anime_id, _ in sorted_anime[:n]:  # Chỉ lấy tối đa `n` anime
         anime_data = df_anime[df_anime['Anime_id'] == anime_id].iloc[0].to_dict()
         recommendations.append(anime_data)
 
     return jsonable(recommendations)
+
+
 
 import uvicorn
 import os
