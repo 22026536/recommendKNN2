@@ -37,7 +37,7 @@ mat_anime = csr_matrix(animes_users.values)
 print("Danh sách user_id có trong animes_users.index:", animes_users.index.tolist())
 
 # Bước 2: Huấn luyện mô hình KNN để tìm các người dùng tương tự
-model = NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=5)
+model = NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=10)
 model.fit(mat_anime)
 
 def jsonable(data):
