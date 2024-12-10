@@ -40,6 +40,8 @@ user_anime_matrix = pd.DataFrame(
 animes_users = user_anime_matrix.pivot(index="User_id", columns="Anime_id", values="Rating").fillna(0)
 mat_anime = csr_matrix(animes_users.values)
 
+print("Danh sách user_id có trong animes_users.index:", animes_users.index.tolist())
+
 # Bước 2: Huấn luyện mô hình KNN để tìm các người dùng tương tự
 model = NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=5)  # Bạn có thể thay đổi số lượng người dùng gần nhất (n_neighbors)
 model.fit(mat_anime)
@@ -60,6 +62,9 @@ async def recommend(request: Request):
     data = await request.json()
     user_id = data.get("user_id")
     n = data.get("n", 10)  # Số lượng gợi ý, mặc định là 10
+
+    if user_id not in animes_users.index:
+        return {"error": f"User ID {user_id} không tồn tại trong dữ liệu"}
 
     # Tìm người dùng tương tự
     user_idx = animes_users.index.get_loc(user_id)
